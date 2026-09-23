@@ -120,6 +120,26 @@ def test_static_render_call_also_detaches() -> None:
     assert "current_screens" in code
 
 
+def test_web_figure_resolution_unwraps_a_wrapped_figure() -> None:
+    # An interactive plotter can return a wrapper rather than the Figure: JutulDarcy's
+    # plot_reservoir returns Jutul's PlotExplorerOutput (the figure plus the explorer's
+    # scene and controls). Without the unwrap the web path falls through to
+    # current_figure(), which happens to work only as long as the plotter left its
+    # figure current -- and Makie.save has no method for the wrapper at all, which is
+    # what silently cost the warm packages their plot bake.
+    for code in (
+        _live_code(),
+        web_render_call(
+            user_code="plot_reservoir(model)",
+            png_path=Path("/tmp/p.png"),
+            html_path=Path("/tmp/p.html"),
+        ),
+    ):
+        assert "hasproperty(_val, :fig)" in code
+        # Before the current_figure() fallback, or the wrapper never reaches it.
+        assert code.index("hasproperty(_val, :fig)") < code.index("current_figure()")
+
+
 def test_cairo_detach_censuses_the_whole_scene_tree() -> None:
     code = _live_code()
     detach = code[code.index("CairoMakie.Screen") :]

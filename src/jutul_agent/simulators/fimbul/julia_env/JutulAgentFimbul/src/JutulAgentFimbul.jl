@@ -38,7 +38,14 @@ end
 function _warm_figure(build)
     dir = tempdir()
     GLMakie.activate!(visible = false)
-    fig = build()
+    # Resolved, not saved as returned: an interactive plotter hands back a wrapper
+    # around its figure rather than the figure (`plot_reservoir` returns Jutul's
+    # `PlotExplorerOutput`), and `Makie.save` has no method for one. The shared
+    # capture helper is where the shapes the session produces are known, and going
+    # through it is what keeps this bake from silently falling off the moment a
+    # plotter changes what it returns.
+    fig = JutulAgent.JutulAgentPlots.figure_of(build())
+    fig === nothing && error("warm-up: the plotter returned no Makie figure to save")
     GLMakie.save(joinpath(dir, "jutul_agent_native_warm.png"), fig)
     CairoMakie.activate!()
     CairoMakie.save(joinpath(dir, "jutul_agent_poster_warm.png"), fig)

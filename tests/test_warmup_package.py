@@ -131,6 +131,26 @@ def test_warm_packages_expose_the_workload_as_a_function() -> None:
         )
 
 
+def test_warm_packages_resolve_a_plotter_return_before_saving_it() -> None:
+    # A warm package that saves whatever its plotter returned breaks the moment the
+    # plotter wraps its figure -- as JutulDarcy's plot_reservoir does, returning
+    # Jutul's PlotExplorerOutput, which Makie.save has no method for. The throw is
+    # swallowed by @compile_workload, so the env still precompiles green while the
+    # entire plot bake is gone and every first plot is slow again. Going through the
+    # shared resolver (JutulAgentPlots.figure_of) is what keeps the warm packages on
+    # the shapes the plot tool itself handles.
+    for name in registry.names():
+        adapter = registry.get(name)
+        pkg = adapter.julia_env_template_path / adapter.warm_package
+        text = (pkg / "src" / f"{adapter.warm_package}.jl").read_text(encoding="utf-8")
+        if "Makie.save(" not in text:
+            continue  # a warm package that bakes no figure save has nothing to resolve
+        assert "figure_of" in text, (
+            f"{name}: warm package saves a figure without resolving the plotter's "
+            "return value through JutulAgentPlots.figure_of"
+        )
+
+
 def test_every_env_declares_both_runtime_packages() -> None:
     for name in registry.names():
         adapter = registry.get(name)

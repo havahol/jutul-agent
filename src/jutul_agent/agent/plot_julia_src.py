@@ -352,6 +352,10 @@ def _web_figure_block(user_code: str) -> str:
     and live-serve builders start from this, so the figure-resolution logic lives in
     one place.
 
+    The shapes resolved here mirror ``JutulAgentPlots.figure_of`` in the shared Julia
+    runtime, which the terminal capture and the warm packages share; this path stays
+    standalone because the generated code talks to Makie directly.
+
     Absorbing the display costs a real GL screen, so the screens are closed once the
     figure is in hand: an invisible one is still a live context whose render loop
     keeps running for the rest of the session, against the same GPU driver the next
@@ -376,6 +380,12 @@ def _web_figure_block(user_code: str) -> str:
         "        _val.figure\n"
         "    elseif _val isa Tuple && length(_val) >= 1 && _val[1] isa _M.Figure\n"
         "        _val[1]\n"
+        # A wrapper holding the figure in a `fig` field: `plot_reservoir` returns
+        # Jutul's `PlotExplorerOutput`, the figure plus the explorer's controls.
+        # Matched by the field, not the type, so this needs no dependency on the
+        # plotter's package (the shared capture path resolves the same shapes).
+        "    elseif hasproperty(_val, :fig) && _val.fig isa _M.Figure\n"
+        "        _val.fig\n"
         "    else\n"
         "        _M.current_figure()\n"
         "    end\n"

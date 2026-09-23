@@ -6,9 +6,10 @@ each plot it activates GLMakie (visible for an interactive window, offscreen
 otherwise), evaluates the user's expression, and hands the result to capture.
 
 capture resolves a Makie Figure from whatever the plotter produced: a returned
-Figure or FigureAxisPlot, a (fig, ax, plot) tuple, or, for plotters that open a
-window or call display and return an axis/screen/nothing, the figure Makie just
-drew (current_figure). It then saves that figure with GLMakie.
+Figure or FigureAxisPlot, a (fig, ax, plot) tuple, a wrapper holding the figure in
+a `fig` field, or, for plotters that open a window or call display and return an
+axis/screen/nothing, the figure Makie just drew (current_figure). It then saves
+that figure with GLMakie.
 """
 
 module JutulAgentPlots
@@ -16,7 +17,7 @@ module JutulAgentPlots
 import GLMakie
 const Makie = GLMakie.Makie  # Makie.save dispatches on the active GLMakie backend
 
-export capture, recapture, close_windows
+export capture, recapture, close_windows, figure_of
 
 # Interactive windows keyed by a caller-chosen string (the plot's slot). The same
 # key refreshes that window in place; a new key opens a new window. Recapturing a
@@ -39,21 +40,43 @@ function _current_fig()
     return f isa Makie.Figure ? f : nothing
 end
 
-"""Resolve a Makie Figure from the value a plot expression evaluated to.
+"""Resolve a Makie Figure from a plotter's return value, or nothing when the value
+is not one of the shapes a plotter hands back.
 
-A returned Figure, FigureAxisPlot, or (fig, ax, plot) tuple is used directly.
-Otherwise we fall back to the figure Makie just drew (current_figure), which is how
-plotters that open a window or call display surface theirs. prev is current_figure()
-from before the expression ran: if the current figure is unchanged from prev,
-nothing new was drawn (a non-figure return value, or a plotter that logged and drew
-nothing), so we return nothing and the caller reports an honest error rather than
-saving a stale, unrelated figure under this slot."""
-function _as_figure(x, prev = nothing)
+A Figure, a FigureAxisPlot and a (fig, ax, plot) tuple carry theirs directly. So does
+a wrapper that keeps the figure in a `fig` field: JutulDarcy's `plot_reservoir` (the
+default interactive form) returns Jutul's `PlotExplorerOutput`, which holds the Figure
+alongside the explorer's scene and controls, and `Makie.save` has no method for that.
+The wrapper is recognised by the field rather than the type, so this needs no
+dependency on the plotter's package and covers the next plotter that wraps the same
+way.
+
+Public because the per-simulator warm packages save what a plotter returned too, and
+the shapes belong in one place: a resolver reimplemented there is one that goes stale
+on its own (see JutulAgentJutulDarcy's `_warm_figure`)."""
+function figure_of(x)
     x isa Makie.Figure && return x
     x isa Makie.FigureAxisPlot && return x.figure
     if x isa Tuple && length(x) >= 1 && x[1] isa Makie.Figure   # plot_cell_data / plot_mesh
         return x[1]
     end
+    if hasproperty(x, :fig) && getproperty(x, :fig) isa Makie.Figure   # plot_reservoir
+        return x.fig
+    end
+    return nothing
+end
+
+"""Resolve a Makie Figure from the value a plot expression evaluated to.
+
+A value `figure_of` recognises is used directly. Otherwise we fall back to the figure
+Makie just drew (current_figure), which is how plotters that open a window or call
+display surface theirs. prev is current_figure() from before the expression ran: if
+the current figure is unchanged from prev, nothing new was drawn (a non-figure return
+value, or a plotter that logged and drew nothing), so we return nothing and the caller
+reports an honest error rather than saving a stale, unrelated figure under this slot."""
+function _as_figure(x, prev = nothing)
+    fig = figure_of(x)
+    fig === nothing || return fig
     cf = _current_fig()
     (cf === nothing || cf === prev) && return nothing
     return cf
