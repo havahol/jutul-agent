@@ -826,6 +826,23 @@ def test_artifact_wire_events_replay_falls_back_to_poster() -> None:
     }
 
 
+def test_artifact_wire_events_prefixes_base_path() -> None:
+    payloads = [
+        {
+            "path": "artifacts/scene.html",
+            "mime": "text/html",
+            "caption": "interactive",
+            "kind": "plot",
+            "poster": "artifacts/scene.png",
+            "live_url": "/live/sid/viz/scene",
+            "source_code": "lines(1:10)",
+        },
+    ]
+    (event,) = artifact_wire_events(payloads, "sid", base_path="/restricted")
+    assert event["url"] == "/restricted/live/sid/viz/scene"
+    assert event["poster"] == "/restricted/sessions/sid/artifacts/scene.png"
+
+
 def _plot_eval_handler(code: str):
     """Answers for the Julia the replot path evaluates, keyed on its markers."""
     from jutul_agent.agent import plot_julia_src as jl
